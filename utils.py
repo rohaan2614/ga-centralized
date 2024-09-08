@@ -2,6 +2,24 @@ import os
 import glob
 import torch
 
+def remove_old_checkpoints(save_dir: str, search_pattern: str) -> None:
+    """
+    Remove all checkpoints except the latest one.
+    """
+    # Get a list of all matching checkpoint files
+    checkpoint_files = glob.glob(os.path.join(save_dir, search_pattern))
+
+    # If there are more than one checkpoint, remove all but the latest
+    if len(checkpoint_files) > 1:
+        latest_checkpoint = max(checkpoint_files, key=os.path.getctime)
+
+        # Delete all except the latest checkpoint
+        for checkpoint in checkpoint_files:
+            if checkpoint != latest_checkpoint:
+                os.remove(checkpoint)
+                print(f"Removed old checkpoint: {checkpoint}")
+
+
 def save_checkpoint(round_num : int, 
                     model, 
                     optimizer, 
@@ -14,8 +32,13 @@ def save_checkpoint(round_num : int,
     # Construct filename with optional keyword
     if keyword:
         filename = os.path.join(save_dir, f'checkpoint_{keyword}_round_{round_num}.pth')
+        search_pattern = f'checkpoint_{keyword}_*.pth'
     else:
         filename = os.path.join(save_dir, f'checkpoint_round_{round_num}.pth')
+        search_pattern = 'checkpoint_round_*.pth'
+        
+    # Remove older checkpoints before saving the new one
+    remove_old_checkpoints(save_dir, search_pattern)
 
     # Save the checkpoint
     variables_dict.update({
@@ -137,4 +160,3 @@ def test(model,
 
     torch.cuda.empty_cache()
     return avg_test_loss, accuracy
-

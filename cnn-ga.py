@@ -1,99 +1,39 @@
+# Ignore all warnings
 import warnings
+warnings.filterwarnings('ignore')
+
+from datetime import datetime
+import argparse
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-import numpy as np
 import pandas as pd
 import random
-import matplotlib.pyplot as plt
-from datetime import datetime
-import argparse
 
-from models.LeNet5 import LeNet5
-from models.ResNet18 import ResNet
+from models.CNN import CNN
 import utils
+from utils import train, test
+import ga_utils
+from ga import GA
 
 # Global variables
 TRAIN_BATCH_SIZE = 128
 EPOCHS = 10
 CHECKPOINT_INTERVAL = 100
+q = 5
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DATA_DIR = './data'
 SAVE_DIR = './save'
-# MODEL_NAME = 'ResNet'
-# model = ResNet().to(DEVICE)
-MODEL_NAME = 'LeNet5'
-model = LeNet5().to(DEVICE)
-KEYWORD = MODEL_NAME
-clipping = False
-if clipping:
+MODEL_NAME = 'cnn'
+
+KEYWORD = MODEL_NAME + '_ga' + f'_{TRAIN_BATCH_SIZE}' + f'_{int(q)}'
+
+CLIPPING = False
+if CLIPPING:
     KEYWORD += '_clipped_grads'
-
-
-def train(model, 
-          train_loader, 
-          optimizer, 
-          criterion, 
-          batch_idx, 
-          device):
-    model.train()
-    train_loss = 0
-    
-    # current weights
-    w_t = {name: weights.clone().detach().cpu() for name, weights in model.state_dict().items()}
-    
-    data, target = utils.get_batch_by_idx(train_loader, batch_idx)
-    data, target = data.to(device), target.to(device)
-    optimizer.zero_grad()
-    output = model(data)
-    loss = criterion(output, target)
-    loss.backward()
-    # L2 Norm Gradient
-    total_grad_norm = 0
-    for param in model.parameters():
-        if param.grad is not None:
-            total_grad_norm += param.grad.norm().item() ** 2  # Sum of squares of gradients
-
-    grad_norm = total_grad_norm ** 0.5  # Square root to get the L2 norm
-    
-    # Gradient Clipping
-    if clipping:
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-    
-    optimizer.step()
-
-    train_loss += loss.item()
-    
-    # new weights
-    w_t_plus_1 = {name: weights.clone().detach().cpu() for name, weights in model.state_dict().items()}
-    updates = {
-        name: (w_t[name] - w_t_plus_1[name])
-        for name in w_t_plus_1}
-    
-    return updates, loss, grad_norm
-
-def test(model, 
-         device, 
-         test_loader, 
-         criterion):
-    model.eval()
-    test_loss = 0
-    correct = 0
-    with torch.no_grad():
-        for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
-            output = model(data)
-            test_loss += criterion(output, target).item()  # Sum up batch loss
-            pred = output.argmax(dim=1, keepdim=True)  # Get the index of the max log-probability
-            correct += pred.eq(target.view_as(pred)).sum().item()
-
-    avg_test_loss = test_loss / len(test_loader.dataset)
-    accuracy = 100. * correct / len(test_loader.dataset)
-    print(f'\nTest set: Average loss: {avg_test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy:.0f}%)\n')
-
-    return avg_test_loss, accuracy
 
 if __name__ == "__main__":
     # Set up argument parser
@@ -107,8 +47,7 @@ if __name__ == "__main__":
     print(f"This script was run at {formatted_now}.")
     
     # Generate CSV filename with optional job_id
-    csv_suffix = start_time.strftime("%Y-%m-%d-%H-%M")
-    csv_filename = f'{MODEL_NAME}_{csv_suffix}'
+    csv_filename = f'{MODEL_NAME}'
     if args.job_id:
         csv_filename += f'_{args.job_id}'
     csv_filename += '.csv'
@@ -134,6 +73,7 @@ if __name__ == "__main__":
     rounds = len(train_loader) * EPOCHS
     print(f"Rounds: {rounds}, Batch Size: {train_loader.batch_size}")
     
+    model = CNN().to(DEVICE)
     print("Model initialized to device:", DEVICE)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), weight_decay=1e-4)
@@ -142,6 +82,10 @@ if __name__ == "__main__":
     test_losses = []
     train_losses = []
     accuracies = []
+    deltas = []
+    gws = []
+    gws_normalized = []
+    approximation_errors = []
     gradients = []
     
     checkpoint_dict = utils.load_checkpoint(keyword=KEYWORD,
@@ -152,20 +96,62 @@ if __name__ == "__main__":
         accuracies = checkpoint_dict['accuracies']
         train_losses = checkpoint_dict['train_losses']
         test_losses = checkpoint_dict['test_losses']
+        deltas = checkpoint_dict['deltas']
+        gws = checkpoint_dict['gws']
+        gws_normalized = checkpoint_dict['gws_normalized']
+        approximation_errors = checkpoint_dict['approximation_errors']
         start_round = checkpoint_dict['round_num'] + 1
         gradients = checkpoint_dict['gradients']
     else:
         start_round = 1
+        
     for round in range(start_round, 1 + rounds):
         print(f"Step: [{round}/{1 + rounds}]")
+        
         batch_idx = (round % len(train_loader)) % len(train_loader)
         updates, loss, grad_norm = train(
-        model=model,
-        train_loader=train_loader,
-        optimizer=optimizer,
-        criterion=criterion,
-        batch_idx=batch_idx,
-        device=DEVICE)
+            model=model,
+            train_loader=train_loader,
+            optimizer=optimizer,
+            criterion=criterion,
+            batch_idx=batch_idx,
+            device=DEVICE,
+            clipping=CLIPPING)
+        
+        # apply GA
+        updates_flattened, shapes = ga_utils.flatten_vector(updates, device=DEVICE)
+        seed = random.randint(0, 100)
+        ga = GA(seed=seed, 
+                d=len(updates_flattened), 
+                q=int(q), 
+                device=DEVICE)
+        w = ga.w(delta=updates_flattened)
+        gw = ga.delta(w=w)
+        
+        # Normalize
+        gw_normalized = ga_utils.normalize(
+            tensor=gw, 
+            min_val=updates_flattened.min(), 
+            max_val=updates_flattened.max())
+        
+        # calculate error
+        error = updates_flattened - gw_normalized
+        l2_norm_error = torch.norm(error, p=2)
+        approximation_errors.append(l2_norm_error)
+
+        # apply approximated updates
+        curr_weights_dict = {
+            name: weights.clone().detach().cpu()
+            for name, weights in model.state_dict().items()}
+        
+        curr_weights, _ = ga_utils.flatten_vector(curr_weights_dict, device=DEVICE)
+        new_weights = curr_weights + gw_normalized
+
+        new_weights_dict = ga_utils.vector_to_state_dict(flat_vector=new_weights, 
+                                                         shapes=shapes,
+                                                         torchvision_model=True)
+
+        model.load_state_dict(state_dict=new_weights_dict)
         
         avg_test_loss, accuracy = test(model = model, 
                                        device = DEVICE, 
@@ -173,9 +159,12 @@ if __name__ == "__main__":
                                        criterion=criterion)
 
         # for plotting
-        test_losses.append(loss)
-        train_losses.append(avg_test_loss)
+        train_losses.append(float(loss))
+        test_losses.append(avg_test_loss)
         accuracies.append(accuracy)
+        deltas.append(updates_flattened)
+        gws.append(gw)
+        gws_normalized.append(gw_normalized)
         gradients.append(grad_norm)
         
         # Save checkpoint after every x rounds
@@ -188,6 +177,10 @@ if __name__ == "__main__":
                             'test_losses' : test_losses,
                             'train_losses' : train_losses,
                             'accuracies' : accuracies,
+                            'deltas' : deltas,
+                            'gws' : gws,
+                            'gws_normalized' : gws_normalized,
+                            'approximation_errors' : approximation_errors,
                             'gradients' : gradients,
                             },
                         keyword=KEYWORD)

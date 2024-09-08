@@ -1,18 +1,18 @@
+# Ignore all warnings
 import warnings
+warnings.filterwarnings('ignore')
+
+from datetime import datetime
+import argparse
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-import numpy as np
 import pandas as pd
-import random
-import matplotlib.pyplot as plt
-from datetime import datetime
-import argparse
 
 from models.LeNet5 import LeNet5
-from models.ResNet18 import ResNet
 import utils
 
 # Global variables
@@ -22,13 +22,11 @@ CHECKPOINT_INTERVAL = 100
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DATA_DIR = './data'
 SAVE_DIR = './save'
-# MODEL_NAME = 'ResNet'
-# model = ResNet().to(DEVICE)
 MODEL_NAME = 'LeNet5'
 model = LeNet5().to(DEVICE)
 KEYWORD = MODEL_NAME
-clipping = False
-if clipping:
+CLIPPING = False
+if CLIPPING:
     KEYWORD += '_clipped_grads'
 
 
@@ -58,8 +56,8 @@ def train(model,
 
     grad_norm = total_grad_norm ** 0.5  # Square root to get the L2 norm
     
-    # Gradient Clipping
-    if clipping:
+    # Gradient CLIPPING
+    if CLIPPING:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
     
     optimizer.step()
@@ -173,8 +171,8 @@ if __name__ == "__main__":
                                        criterion=criterion)
 
         # for plotting
-        test_losses.append(loss)
-        train_losses.append(avg_test_loss)
+        train_losses.append(float(loss))
+        test_losses.append(avg_test_loss)
         accuracies.append(accuracy)
         gradients.append(grad_norm)
         
