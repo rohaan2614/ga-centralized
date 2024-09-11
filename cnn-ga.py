@@ -76,6 +76,7 @@ if __name__ == "__main__":
     model = CNN().to(DEVICE)
     print("Model initialized to device:", DEVICE)
     criterion = nn.CrossEntropyLoss()
+    # TODO: replace this with stochastic gradient
     optimizer = optim.Adam(model.parameters(), weight_decay=1e-4)
     
     # local variables
