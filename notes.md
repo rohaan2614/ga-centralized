@@ -27,4 +27,12 @@
 | 19202113 | CNN() (CIFAR-10) - batch size 128 <br> no clipping <br>  **ga @ q=1e0**  | gres=gpu:2 <br> *=>Not as accurate as without GA but reasonable*  |
 | 19201652 | CNN() (CIFAR-10) - batch size 128 <br> no clipping <br>  **ga @ q=1e1**  | gres=gpu:2 <br> *Repeating exp: <br> model appears accurate and robust. No dramatic drops like before* |
 | 19202115 | CNN() (CIFAR-10) - batch size 128 <br> no clipping <br>  **ga @ q=1e2**  | gres=gpu:2 <br> *=>Slightly more accurate than without GA* |
-
+| 19222139 | **MNIST with GA @ q=5 For Report**  | gres=gpu:a100 <br> *=>* |
+| 19223665 | **MNIST with GA @ q=1 For Report <br> **optimizer = SGD**  | gres=gpu:a100 <br> *=>Perfect* |
+| 19223677 | **MNIST with GA @ q=2 For Report <br> optimizer = SGD**  | gres=gpu:a100 <br> *=>* |
+| 19223663 | **MNIST with GA @ q=5 For Report <br> optimizer = SGD**  | gres=gpu:a100 <br> *=>Perfect* |
+| 19223676 | **MNIST with GA @ q=3 For Report <br> optimizer = SGD**  | gres=gpu:a100 <br> *=>* |
+| 19223675 | **MNIST with GA @ q=4 For Report <br> optimizer = SGD**  | gres=gpu:a100 <br> *=>* |
+| 19234249 | **MNIST with GA @ q=10 For Report <br> optimizer = SGD <br> weight decay = 1e-4**  | gres=gpu:a100 <br> *=>* |
+| 19234252 | **CNN with GA @ q=100 For Report <br> optimizer = SGD <br> weight decay = 1e-4**  | gres=gpu:a100 <br> *=>* |
+| 19235370 | **MNIST with GA @ q=10 For Report <br> optimizer = Adam** <br> Trying to figure out ideal optimal settings for SGD| gres=gpu:a100 <br> *=>* |
